@@ -1,0 +1,1670 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>像素风 Rougelike 地牢 RPG</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --primary-text: #e0e0e0;
+            --secondary-text: #a0a0a0;
+            --accent-color: #ffd700;
+            --ui-bg: rgba(20, 20, 20, 0.9);
+            --border-color: #444;
+            --danger-color: #ff4d4d;
+            --success-color: #4dff4d;
+            --info-color: #4dffff;
+            --xp-color: #8a2be2;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            color: var(--primary-text);
+            font-family: 'Pixelify Sans', 'Microsoft YaHei', sans-serif;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #game-canvas {
+            background-color: #000;
+            image-rendering: pixelated;
+        }
+
+        /* --- HUD --- */
+        #hud {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+        
+        #minimap-container {
+            border: 2px solid var(--border-color);
+            background: rgba(0,0,0,0.5);
+            padding: 2px;
+            border-radius: 5px;
+        }
+
+        #minimap-canvas {
+            width: 120px;
+            height: 120px;
+            image-rendering: pixelated;
+        }
+
+        .hud-stat {
+            display: flex;
+            align-items: center;
+            background: var(--ui-bg);
+            padding: 5px 10px;
+            border-radius: 15px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            font-size: 16px;
+        }
+
+        .hud-stat svg {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+        }
+
+        /* --- UI Windows --- */
+        .ui-window {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            background: var(--ui-bg);
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.7);
+            padding: 20px;
+            z-index: 100;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+            max-width: 90vw;
+            max-height: 80vh;
+            overflow-y: auto;
+            color: var(--primary-text);
+        }
+
+        .ui-window.visible {
+            opacity: 1;
+            visibility: visible;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .window-title {
+            font-size: 24px;
+            color: var(--accent-color);
+            margin-bottom: 20px;
+            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+        
+        /* --- Inventory Window --- */
+        #inventory-window .content {
+            display: flex;
+            gap: 20px;
+        }
+        #inventory-window .tabs {
+            display: flex;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        #inventory-window .tab-button {
+            padding: 10px 20px;
+            background: transparent;
+            border: none;
+            color: var(--secondary-text);
+            cursor: pointer;
+            font-size: 16px;
+            border-bottom: 2px solid transparent;
+        }
+        #inventory-window .tab-button.active {
+            color: var(--accent-color);
+            border-bottom: 2px solid var(--accent-color);
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        #equipment-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-areas:
+                "head weapon"
+                "chest shield"
+                "boots amulet";
+            gap: 15px;
+            width: 350px;
+        }
+        
+        .equip-slot {
+            background: rgba(0,0,0,0.3);
+            border: 1px dashed var(--border-color);
+            border-radius: 5px;
+            padding: 10px;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .equip-slot[data-slot="head"] { grid-area: head; }
+        .equip-slot[data-slot="chest"] { grid-area: chest; }
+        .equip-slot[data-slot="boots"] { grid-area: boots; }
+        .equip-slot[data-slot="weapon"] { grid-area: weapon; }
+        .equip-slot[data-slot="shield"] { grid-area: shield; }
+        .equip-slot[data-slot="amulet"] { grid-area: amulet; }
+
+        .item-icon {
+            width: 48px;
+            height: 48px;
+            background-color: rgba(0,0,0,0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+        
+        .item-details {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .slot-name, .item-name {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .equip-slot .slot-name {
+            color: var(--secondary-text);
+            font-size: 14px;
+        }
+        .equip-slot .item-name { font-weight: bold; }
+        .equip-slot .item-stats { font-size: 12px; color: var(--info-color); }
+        .equip-slot .item-affixes { font-size: 12px; color: var(--success-color); }
+        
+        #items-panel {
+            width: 350px;
+            max-height: 400px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .item-entry {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .item-entry:hover {
+            background: rgba(255, 215, 0, 0.1);
+            border-color: var(--accent-color);
+        }
+
+        /* --- Character Window --- */
+        #character-window .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 20px;
+        }
+        .stat-line {
+            display: flex;
+            justify-content: space-between;
+        }
+        .stat-line .name { color: var(--secondary-text); }
+        .stat-line .value { color: var(--primary-text); font-weight: bold; }
+        
+        /* --- Statue Window --- */
+        #statue-window { width: 500px; }
+        #statue-window .options { display: flex; justify-content: space-around; margin-bottom: 20px; }
+        .statue-option-btn { padding: 10px 20px; font-size: 16px; background-color: #333; border: 1px solid var(--border-color); color: var(--primary-text); border-radius: 5px; cursor: pointer; }
+        .statue-option-btn.active { background-color: var(--accent-color); color: #000; }
+        .statue-view { display: none; }
+        .statue-view.active { display: block; }
+
+        .enchant-item-list, .blessing-list { display: flex; flex-direction: column; gap: 10px; }
+        .enchant-item, .blessing { background: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px; border: 1px solid var(--border-color); }
+        .enchant-item.selectable:hover { background: rgba(255, 215, 0, 0.1); border-color: var(--accent-color); cursor: pointer; }
+        .enchant-affix { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #444; }
+        .affix-line { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        .affix-actions button { font-size: 12px; padding: 3px 6px; margin-left: 5px; }
+        .cost { font-size: 12px; }
+        .cost.xp { color: var(--xp-color); }
+        .cost.gold { color: var(--accent-color); }
+        .blessing-desc { color: var(--secondary-text); font-size: 14px; margin-top: 4px;}
+        .blessing-btn { float: right; }
+        
+        /* --- UI Controls --- */
+        #ui-controls {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 50;
+        }
+        .control-btn {
+            width: 48px;
+            height: 48px;
+            background: var(--ui-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.2s, box-shadow 0.2s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+        .control-btn:hover {
+            background-color: #333;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+        }
+        .control-btn svg {
+            width: 24px;
+            height: 24px;
+            fill: var(--primary-text);
+        }
+        .control-btn .hotkey {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            background: var(--accent-color);
+            color: #000;
+            border-radius: 50%;
+            font-size: 10px;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+        }
+
+        /* --- Log --- */
+        #log-container {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 400px;
+            max-width: 50vw;
+            pointer-events: none;
+            z-index: 40;
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 5px;
+        }
+        .log-message {
+            background: rgba(0,0,0,0.3);
+            color: var(--primary-text);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 14px;
+            text-shadow: 1px 1px 2px #000;
+            opacity: 0;
+            transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+            transform: translateY(20px);
+        }
+        .log-message.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* --- Floating Text --- */
+        .floating-text {
+            position: absolute;
+            pointer-events: none;
+            font-size: 16px;
+            font-weight: bold;
+            text-shadow: 1px 1px 3px #000;
+            animation: floatUp 1.5s ease-out forwards;
+            z-index: 30;
+        }
+        @keyframes floatUp {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-60px); opacity: 0; }
+        }
+
+        /* --- Virtual Controls --- */
+        #virtual-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 90;
+            display: none;
+        }
+        #virtual-controls.active {
+            display: block;
+        }
+        #joystick-zone {
+            position: absolute;
+            left: 20px;
+            bottom: 20px;
+            width: 150px;
+            height: 150px;
+            pointer-events: all;
+        }
+        #joystick-base {
+            position: absolute;
+            width: 120px;
+            height: 120px;
+            background: rgba(50,50,50,0.5);
+            border-radius: 50%;
+            left: 15px;
+            top: 15px;
+            border: 2px solid rgba(100,100,100,0.7);
+        }
+        #joystick-stick {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: rgba(80,80,80,0.8);
+            border-radius: 50%;
+            left: 45px;
+            top: 45px;
+            transition: transform 0.1s;
+        }
+        #action-buttons {
+            position: absolute;
+            right: 20px;
+            bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            pointer-events: all;
+        }
+        .v-button {
+            width: 70px;
+            height: 70px;
+            background: rgba(80,80,80,0.7);
+            border-radius: 50%;
+            border: 2px solid rgba(120,120,120,0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--primary-text);
+            font-size: 18px;
+            font-weight: bold;
+        }
+        #v-button-attack {
+            width: 90px;
+            height: 90px;
+            background: rgba(180, 50, 50, 0.7);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+
+        <!-- HUD -->
+        <div id="hud">
+            <div id="minimap-container">
+                <canvas id="minimap-canvas"></canvas>
+            </div>
+            <div class="hud-stat" id="hp-stat">
+                <svg viewBox="0 0 24 24" fill="var(--danger-color)"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                <span id="hp-value">100 / 100</span>
+            </div>
+            <div class="hud-stat" id="gold-stat">
+                <svg viewBox="0 0 24 24" fill="var(--accent-color)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-12h2v4h-2zm0 6h2v2h-2z"/></svg>
+                <span id="gold-value">0</span>
+            </div>
+        </div>
+
+        <!-- UI Controls -->
+        <div id="ui-controls">
+            <div class="control-btn" id="inventory-btn" title="背包 (B)">
+                <svg viewBox="0 0 24 24"><path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-2 .89-2 2v11c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zM10 4h4v2h-4V4zm10 15H4V8h16v11z"/></svg>
+                <span class="hotkey">B</span>
+            </div>
+            <div class="control-btn" id="character-btn" title="角色 (C)">
+                <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                <span class="hotkey">C</span>
+            </div>
+            <div class="control-btn" id="settings-btn" title="设置 (P)">
+                <svg viewBox="0 0 24 24"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.08-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>
+                <span class="hotkey">P</span>
+            </div>
+        </div>
+
+        <!-- Log Container -->
+        <div id="log-container"></div>
+        
+        <!-- UI Windows -->
+        <div id="inventory-window" class="ui-window">
+            <h2 class="window-title">背包</h2>
+            <div class="tabs">
+                <button class="tab-button active" data-tab="equipment-tab">装备</button>
+                <button class="tab-button" data-tab="items-tab">道具</button>
+            </div>
+            <div id="equipment-tab" class="tab-content active">
+                <div id="equipment-panel">
+                    <!-- Slots will be populated by JS -->
+                </div>
+            </div>
+            <div id="items-tab" class="tab-content">
+                <div id="items-panel">
+                    <!-- Items will be populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <div id="character-window" class="ui-window">
+            <h2 class="window-title">角色属性</h2>
+            <div class="stats-grid" id="character-stats-grid">
+                <!-- Stats will be populated by JS -->
+            </div>
+        </div>
+        
+        <div id="settings-window" class="ui-window">
+             <h2 class="window-title">设置</h2>
+             <div class="setting-item">
+                 <label for="v-controls-toggle">显示虚拟按键</label>
+                 <input type="checkbox" id="v-controls-toggle">
+             </div>
+        </div>
+        
+        <div id="statue-window" class="ui-window">
+            <h2 class="window-title">神秘雕像</h2>
+            <div class="options">
+                <button class="statue-option-btn active" data-view="enchant-view">装备强化</button>
+                <button class="statue-option-btn" data-view="blessing-view">永久祝福</button>
+            </div>
+            <div id="enchant-view" class="statue-view active">
+                <h3>选择一件装备进行强化或洗练 (消耗经验)</h3>
+                <div class="enchant-item-list"></div>
+            </div>
+            <div id="blessing-view" class="statue-view">
+                <h3>使用金币换取永久的祝福</h3>
+                <div class="blessing-list"></div>
+            </div>
+        </div>
+        
+        <!-- Virtual Controls -->
+        <div id="virtual-controls">
+            <div id="joystick-zone">
+                <div id="joystick-base"></div>
+                <div id="joystick-stick"></div>
+            </div>
+            <div id="action-buttons">
+                <div class="v-button" id="v-button-interact">E</div>
+                <div class="v-button" id="v-button-attack">J</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // ======== DOM Elements ========
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const minimapCanvas = document.getElementById('minimap-canvas');
+        const minimapCtx = minimapCanvas.getContext('2d');
+        const gameContainer = document.getElementById('game-container');
+        const hpValue = document.getElementById('hp-value');
+        const goldValue = document.getElementById('gold-value');
+        const logContainer = document.getElementById('log-container');
+        const inventoryBtn = document.getElementById('inventory-btn');
+        const characterBtn = document.getElementById('character-btn');
+        const settingsBtn = document.getElementById('settings-btn');
+        const inventoryWindow = document.getElementById('inventory-window');
+        const characterWindow = document.getElementById('character-window');
+        const settingsWindow = document.getElementById('settings-window');
+        const statueWindow = document.getElementById('statue-window');
+        const vControlsToggle = document.getElementById('v-controls-toggle');
+        const virtualControls = document.getElementById('virtual-controls');
+        
+        // ======== Game Constants ========
+        const TILE_SIZE = 24;
+        const MAP_WIDTH = 200;
+        const MAP_HEIGHT = 200;
+        const PLAYER_SPEED = 150; // pixels per second
+        const ATTACK_CHARGE_TIME = 400; // ms
+        const ATTACK_DURATION = 200; // ms
+        const ATTACK_RADIUS_OUTER = 3.5 * TILE_SIZE;
+        const ATTACK_RADIUS_INNER = 1.5 * TILE_SIZE;
+        const ATTACK_KNOCKBACK = 50;
+
+        // ======== Game State ========
+        let game_state = {
+            player: null,
+            enemies: [],
+            map: [],
+            camera: { x: 0, y: 0 },
+            keysDown: {},
+            floatingTexts: [],
+            logMessages: [],
+            dungeonLevel: 1,
+            isWindowOpen: false,
+            activeStatue: null,
+            joystick: { active: false, x: 0, y: 0, angle: 0, distance: 0 },
+        };
+
+        // ======== Asset & Graphics Definitions ========
+        const COLORS = {
+            WALL: '#3a3a3a',
+            WALL_ACCENT: '#4a4a4a',
+            FLOOR: '#6b6b6b',
+            FLOOR_ACCENT: '#7d7d7d',
+            PLAYER: '#4dffff',
+            PLAYER_ACCENT: '#ffffff',
+            ENEMY_A: '#ff6b6b',
+            ENEMY_A_ACCENT: '#ff9a9a',
+            ENEMY_B: '#f0c674',
+            ENEMY_B_ACCENT: '#fff2c1',
+            CHEST: '#ffd700',
+            CHEST_ACCENT: '#8b4513',
+            STATUE: '#c0c0c0',
+            STATUE_ACCENT: '#a9a9a9',
+            PORTAL_LOCKED: '#ff4d4d',
+            PORTAL_UNLOCKED: '#9d4edd',
+            KEY: '#ffd700',
+        };
+        
+        const DRAW = {
+            player: (ctx, x, y) => {
+                ctx.fillStyle = COLORS.PLAYER_ACCENT;
+                ctx.beginPath();
+                ctx.arc(x, y, TILE_SIZE * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = COLORS.PLAYER;
+                ctx.beginPath();
+                ctx.arc(x, y, TILE_SIZE * 0.3, 0, Math.PI * 2);
+                ctx.fill();
+            },
+            enemyA: (ctx, x, y) => { // Spiky enemy
+                ctx.fillStyle = COLORS.ENEMY_A;
+                ctx.beginPath();
+                for (let i = 0; i < 5; i++) {
+                    ctx.lineTo(x + TILE_SIZE * 0.5 * Math.cos(i * 2 * Math.PI / 5), y + TILE_SIZE * 0.5 * Math.sin(i * 2 * Math.PI / 5));
+                    ctx.lineTo(x + TILE_SIZE * 0.25 * Math.cos((i + 0.5) * 2 * Math.PI / 5), y + TILE_SIZE * 0.25 * Math.sin((i + 0.5) * 2 * Math.PI / 5));
+                }
+                ctx.closePath();
+                ctx.fill();
+            },
+            enemyB: (ctx, x, y) => { // Tanky enemy
+                ctx.fillStyle = COLORS.ENEMY_B_ACCENT;
+                ctx.fillRect(x - TILE_SIZE * 0.4, y - TILE_SIZE * 0.4, TILE_SIZE * 0.8, TILE_SIZE * 0.8);
+                ctx.fillStyle = COLORS.ENEMY_B;
+                ctx.fillRect(x - TILE_SIZE * 0.3, y - TILE_SIZE * 0.3, TILE_SIZE * 0.6, TILE_SIZE * 0.6);
+            },
+            chest: (ctx, x, y) => {
+                ctx.fillStyle = COLORS.CHEST_ACCENT;
+                ctx.fillRect(x - TILE_SIZE * 0.4, y - TILE_SIZE * 0.3, TILE_SIZE * 0.8, TILE_SIZE * 0.6);
+                ctx.fillStyle = COLORS.CHEST;
+                ctx.fillRect(x - TILE_SIZE * 0.35, y - TILE_SIZE * 0.25, TILE_SIZE * 0.7, TILE_SIZE * 0.5);
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(x, y - TILE_SIZE*0.05, TILE_SIZE * 0.05, 0, Math.PI * 2);
+                ctx.fill();
+            },
+            statue: (ctx, x, y) => {
+                ctx.fillStyle = COLORS.STATUE_ACCENT;
+                ctx.beginPath();
+                ctx.moveTo(x, y + TILE_SIZE * 0.5);
+                ctx.lineTo(x - TILE_SIZE * 0.3, y - TILE_SIZE * 0.1);
+                ctx.lineTo(x + TILE_SIZE * 0.3, y - TILE_SIZE * 0.1);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = COLORS.STATUE;
+                ctx.beginPath();
+                ctx.arc(x, y - TILE_SIZE * 0.2, TILE_SIZE * 0.2, 0, Math.PI * 2);
+                ctx.fill();
+            },
+            portal: (ctx, x, y, unlocked) => {
+                const color = unlocked ? COLORS.PORTAL_UNLOCKED : COLORS.PORTAL_LOCKED;
+                const time = Date.now() / 500;
+                for (let i = 0; i < 5; i++) {
+                    const radius = TILE_SIZE * 0.5 * (0.5 + 0.5 * Math.sin(time + i));
+                    ctx.strokeStyle = color;
+                    ctx.globalAlpha = 0.2 + 0.5 * Math.sin(time + i);
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(x, y, radius, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                ctx.globalAlpha = 1;
+            },
+            key: (ctx, x, y) => {
+                ctx.fillStyle = COLORS.KEY;
+                ctx.beginPath();
+                ctx.arc(x, y - TILE_SIZE * 0.2, TILE_SIZE * 0.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillRect(x - TILE_SIZE * 0.05, y, TILE_SIZE * 0.1, TILE_SIZE * 0.4);
+                ctx.fillRect(x + TILE_SIZE * 0.1, y + TILE_SIZE * 0.2, TILE_SIZE * 0.1, TILE_SIZE * 0.1);
+            },
+            wall: (ctx, x, y, variant) => {
+                ctx.fillStyle = COLORS.WALL;
+                ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                if(variant > 0.7) { // Use pre-calculated variant
+                    ctx.fillStyle = COLORS.WALL_ACCENT;
+                    ctx.fillRect(x + TILE_SIZE*0.2, y + TILE_SIZE*0.2, TILE_SIZE * 0.6, TILE_SIZE * 0.6);
+                }
+            },
+            floor: (ctx, x, y, variant) => {
+                ctx.fillStyle = COLORS.FLOOR;
+                ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                if(variant > 0.9) { // Use pre-calculated variant
+                    ctx.fillStyle = COLORS.FLOOR_ACCENT;
+                    ctx.fillRect(x + TILE_SIZE*0.3, y + TILE_SIZE*0.3, TILE_SIZE * 0.4, TILE_SIZE * 0.4);
+                }
+            }
+        };
+        
+        // ======== Item & Equipment Definitions ========
+        const EQUIP_SLOTS = ['weapon', 'shield', 'head', 'chest', 'boots', 'amulet'];
+        const AFFIX_POOL = {
+            prefix: [
+                { text: "强壮的", stats: { maxHp: 10 } },
+                { text: "敏捷的", stats: { def: 2 } },
+                { text: "毁灭之", stats: { atk: 3 } },
+                { text: "黄金", stats: { goldFind: 0.1 } },
+            ],
+            suffix: [
+                { text: "之吸血", stats: { lifeSteal: 0.02 } },
+                { text: "之格挡", stats: { def: 3 } },
+                { text: "之坚韧", stats: { maxHp: 15 } },
+                { text: "之财富", stats: { goldFind: 0.15 } },
+            ]
+        };
+        
+        class Item {
+            constructor({name, type, quality, stats = {}, affixes = []}) {
+                this.id = 'item_' + Date.now() + Math.random();
+                this.name = name;
+                this.type = type; // 'equipment', 'consumable'
+                this.quality = quality; // 'common', 'rare', 'epic'
+                this.stats = stats;
+                this.affixes = affixes;
+                this.iconDataUrl = null;
+            }
+        }
+        
+        // **NEW** Function to generate random item icons
+        function generateItemIcon(item) {
+            const iconCanvas = document.createElement('canvas');
+            iconCanvas.width = 48;
+            iconCanvas.height = 48;
+            const iCtx = iconCanvas.getContext('2d');
+            const w = 48, h = 48;
+
+            // Base colors
+            iCtx.fillStyle = ['#6d4c41', '#795548', '#5d4037'][Math.floor(Math.random()*3)];
+            iCtx.strokeStyle = '#3e2723';
+            iCtx.lineWidth = 2;
+
+            // Draw shape based on slot
+            switch(item.slot) {
+                case 'weapon':
+                    iCtx.fillRect(w*0.4, h*0.1, w*0.2, h*0.8); // Blade
+                    iCtx.fillRect(w*0.2, h*0.6, w*0.6, h*0.15); // Crossguard
+                    break;
+                case 'shield':
+                    iCtx.beginPath();
+                    iCtx.arc(w/2, h/2, w*0.4, 0, Math.PI*2);
+                    iCtx.fill();
+                    iCtx.stroke();
+                    break;
+                case 'head':
+                    iCtx.beginPath();
+                    iCtx.arc(w/2, h*0.6, w*0.35, Math.PI, 0);
+                    iCtx.fill();
+                    iCtx.stroke();
+                    break;
+                case 'chest':
+                    iCtx.beginPath();
+                    iCtx.moveTo(w*0.2, h*0.2);
+                    iCtx.lineTo(w*0.8, h*0.2);
+                    iCtx.lineTo(w*0.7, h*0.8);
+                    iCtx.lineTo(w*0.3, h*0.8);
+                    iCtx.closePath();
+                    iCtx.fill();
+                    iCtx.stroke();
+                    break;
+                case 'boots':
+                    iCtx.fillRect(w*0.2, h*0.3, w*0.3, h*0.5);
+                    iCtx.fillRect(w*0.2, h*0.7, w*0.5, h*0.2);
+                     iCtx.fillRect(w*0.55, h*0.3, w*0.3, h*0.5);
+                    iCtx.fillRect(w*0.55, h*0.7, w*0.5, h*0.2);
+                    break;
+                case 'amulet':
+                    iCtx.strokeStyle = '#a1887f';
+                    iCtx.beginPath();
+                    iCtx.arc(w/2, h/2, w*0.4, 0, Math.PI*2);
+                    iCtx.stroke();
+                    iCtx.fillStyle = ['#ffd700', '#c0c0c0', '#4fc3f7'][Math.floor(Math.random()*3)]; // Gem color
+                    iCtx.beginPath();
+                    iCtx.arc(w/2, h/2, w*0.25, 0, Math.PI*2);
+                    iCtx.fill();
+                    break;
+            }
+
+            // Add accent
+            iCtx.fillStyle = '#ffd700';
+            iCtx.fillRect(w/2-w*0.05, h/2-h*0.05, w*0.1, h*0.1);
+
+            return iconCanvas.toDataURL();
+        }
+
+        const generateRandomEquipment = (level) => {
+            const slot = EQUIP_SLOTS[Math.floor(Math.random() * EQUIP_SLOTS.length)];
+            const baseItems = {
+                weapon: { name: '短剑', stats: { atk: 5 } },
+                shield: { name: '圆盾', stats: { def: 5 } },
+                head: { name: '铁盔', stats: { maxHp: 10 } },
+                chest: { name: '锁子甲', stats: { maxHp: 20, def: 3 } },
+                boots: { name: '皮靴', stats: { def: 2 } },
+                amulet: { name: '铜护符', stats: {} },
+            };
+            
+            let item = new Item({
+                name: baseItems[slot].name,
+                type: 'equipment',
+                quality: 'common',
+                stats: { ...baseItems[slot].stats }
+            });
+            item.slot = slot;
+
+            const prefix = AFFIX_POOL.prefix[Math.floor(Math.random() * AFFIX_POOL.prefix.length)];
+            const suffix = AFFIX_POOL.suffix[Math.floor(Math.random() * AFFIX_POOL.suffix.length)];
+            
+            item.affixes.push(prefix);
+            item.affixes.push(suffix);
+            item.name = `${prefix.text}${item.name}${suffix.text}`;
+            
+            // **NEW** Generate and assign icon
+            item.iconDataUrl = generateItemIcon(item);
+
+            return item;
+        }
+
+        // ======== Player Class ========
+        class Player {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                // **UPDATED** Increased base attack
+                this.baseStats = { maxHp: 100, hp: 100, atk: 15, def: 5, goldFind: 0, lifeSteal: 0 };
+                this.stats = { ...this.baseStats };
+                this.gold = 0;
+                this.xp = 0;
+                this.keys = 0;
+                this.equipment = { head: null, chest: null, boots: null, weapon: null, shield: null, amulet: null };
+                this.inventory = [];
+                this.isAttacking = false;
+                this.attackTimer = 0;
+                this.permanentBlessings = { maxHp: 0, atk: 0, def: 0 };
+            }
+
+            update(dt) {
+                // Movement
+                let dx = 0;
+                let dy = 0;
+                if (game_state.keysDown['w'] || game_state.keysDown['ArrowUp']) dy -= 1;
+                if (game_state.keysDown['s'] || game_state.keysDown['ArrowDown']) dy += 1;
+                if (game_state.keysDown['a'] || game_state.keysDown['ArrowLeft']) dx -= 1;
+                if (game_state.keysDown['d'] || game_state.keysDown['ArrowRight']) dx += 1;
+
+                if (game_state.joystick.active) {
+                    dx = game_state.joystick.x;
+                    dy = game_state.joystick.y;
+                }
+
+                if (dx !== 0 || dy !== 0) {
+                    const mag = Math.sqrt(dx * dx + dy * dy);
+                    dx /= mag;
+                    dy /= mag;
+                    
+                    const nextX = this.x + dx * PLAYER_SPEED * dt;
+                    const nextY = this.y + dy * PLAYER_SPEED * dt;
+                    
+                    if (!isWall(nextX, this.y)) this.x = nextX;
+                    if (!isWall(this.x, nextY)) this.y = nextY;
+                }
+
+                // Attack logic
+                if (this.isAttacking) {
+                    this.attackTimer += dt * 1000;
+                    if (this.attackTimer >= ATTACK_CHARGE_TIME + ATTACK_DURATION) {
+                        this.isAttacking = false;
+                    }
+                }
+            }
+            
+            startAttack() {
+                if (!this.isAttacking) {
+                    this.isAttacking = true;
+                    this.attackTimer = 0;
+                    setTimeout(() => this.performAttack(), ATTACK_CHARGE_TIME);
+                }
+            }
+
+            performAttack() {
+                addFloatingText('Swoosh!', this.x, this.y, '#fff');
+                game_state.enemies.forEach(enemy => {
+                    const dist = Math.sqrt(Math.pow(this.x - enemy.x, 2) + Math.pow(this.y - enemy.y, 2));
+                    if (dist < ATTACK_RADIUS_OUTER && dist > ATTACK_RADIUS_INNER) {
+                        const damage = Math.max(1, this.stats.atk - enemy.def);
+                        enemy.takeDamage(damage);
+                        // knockback
+                        const angle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
+                        enemy.x += Math.cos(angle) * ATTACK_KNOCKBACK;
+                        enemy.y += Math.sin(angle) * ATTACK_KNOCKBACK;
+                        // Lifesteal
+                        const healed = Math.floor(damage * this.stats.lifeSteal);
+                        if (healed > 0) {
+                             this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + healed);
+                             addFloatingText(`+${healed}`, this.x, this.y, 'lightgreen');
+                        }
+                    }
+                });
+            }
+            
+            interact() {
+                const interactRange = TILE_SIZE * 1.5;
+                // Chests
+                for(let obj of game_state.map.objects.chests) {
+                    const dist = Math.hypot(this.x - obj.x, this.y - obj.y);
+                    if(dist < interactRange) {
+                        this.openChest(obj);
+                        game_state.map.objects.chests = game_state.map.objects.chests.filter(c => c !== obj);
+                        return;
+                    }
+                }
+                // Statues
+                for(let obj of game_state.map.objects.statues) {
+                    const dist = Math.hypot(this.x - obj.x, this.y - obj.y);
+                    if(dist < interactRange) {
+                        openStatueWindow(obj);
+                        return;
+                    }
+                }
+                // Portal
+                const portal = game_state.map.objects.portal;
+                const dist = Math.hypot(this.x - portal.x, this.y - portal.y);
+                if (dist < interactRange) {
+                    if (portal.unlocked) {
+                        nextLevel();
+                    } else if (this.keys > 0) {
+                        this.keys--;
+                        portal.unlocked = true;
+                        addLog('你用钥匙解锁了传送门!');
+                        updateUI();
+                    } else {
+                        addLog('传送门被锁住了，需要一把钥匙。');
+                    }
+                }
+            }
+            
+            openChest(chest) {
+                addLog('你打开了一个宝箱！');
+                const loot = generateRandomEquipment(game_state.dungeonLevel);
+                this.pickupItem(loot);
+            }
+
+            pickupItem(item) {
+                if(item.type === 'key') {
+                    this.keys++;
+                    addFloatingText(`钥匙 +1`, this.x, this.y, COLORS.KEY);
+                    updateUI();
+                } else {
+                    this.inventory.push(item);
+                    addFloatingText(`${item.name}`, this.x, this.y, '#4dffff');
+                    updateInventoryUI();
+                }
+            }
+            
+            equip(item) {
+                if (this.equipment[item.slot]) {
+                    this.unequip(item.slot);
+                }
+                this.equipment[item.slot] = item;
+                this.inventory = this.inventory.filter(i => i.id !== item.id);
+                this.recalculateStats();
+                updateUI();
+            }
+
+            unequip(slot) {
+                const item = this.equipment[slot];
+                if (item) {
+                    this.inventory.push(item);
+                    this.equipment[slot] = null;
+                    this.recalculateStats();
+                    updateUI();
+                }
+            }
+            
+            recalculateStats() {
+                this.stats = { ...this.baseStats };
+                // Apply permanent blessings first
+                for(const stat in this.permanentBlessings) {
+                    this.stats[stat] = (this.stats[stat] || 0) + this.permanentBlessings[stat];
+                }
+                
+                for (const slot in this.equipment) {
+                    const item = this.equipment[slot];
+                    if (item) {
+                        for(const stat in item.stats) {
+                            this.stats[stat] = (this.stats[stat] || 0) + item.stats[stat];
+                        }
+                        item.affixes.forEach(affix => {
+                            for(const stat in affix.stats) {
+                                this.stats[stat] = (this.stats[stat] || 0) + affix.stats[stat];
+                            }
+                        });
+                    }
+                }
+                this.stats.hp = Math.min(this.stats.hp, this.stats.maxHp);
+            }
+
+            takeDamage(amount) {
+                this.stats.hp -= amount;
+                addFloatingText(`-${amount}`, this.x, this.y, 'red');
+                if (this.stats.hp <= 0) {
+                    this.stats.hp = 0;
+                    alert('你死了！刷新页面重新开始。');
+                    location.reload();
+                }
+                updateUI();
+            }
+        }
+
+        // ======== Enemy Class ========
+        class Enemy {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.speed = 80 + Math.random() * 20;
+                this.hp = 30 + game_state.dungeonLevel * 10;
+                this.atk = 5 + game_state.dungeonLevel * 2;
+                this.def = 2 + game_state.dungeonLevel;
+                this.aggroRange = TILE_SIZE * 10;
+                this.attackRange = TILE_SIZE * 0.8;
+                this.attackCooldown = 0;
+                this.drawFunc = type === 'A' ? DRAW.enemyA : DRAW.enemyB;
+            }
+
+            update(dt) {
+                this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+                
+                const player = game_state.player;
+                const dist = Math.hypot(player.x - this.x, player.y - this.y);
+
+                if (dist < this.aggroRange) {
+                    if (dist > this.attackRange) {
+                        // Move towards player
+                        const angle = Math.atan2(player.y - this.y, player.x - this.x);
+                        const nextX = this.x + Math.cos(angle) * this.speed * dt;
+                        const nextY = this.y + Math.sin(angle) * this.speed * dt;
+                        if (!isWall(nextX, this.y)) this.x = nextX;
+                        if (!isWall(this.x, nextY)) this.y = nextY;
+                    } else if (this.attackCooldown <= 0) {
+                        // Attack player
+                        const damage = Math.max(1, this.atk - player.stats.def);
+                        player.takeDamage(damage);
+                        this.attackCooldown = 2; // 2 second cooldown
+                    }
+                }
+            }
+
+            takeDamage(amount) {
+                this.hp -= amount;
+                addFloatingText(`-${amount}`, this.x, this.y, 'orange');
+                if (this.hp <= 0) this.die();
+            }
+            
+            die() {
+                game_state.enemies = game_state.enemies.filter(e => e !== this);
+                const goldDrop = 5 + game_state.dungeonLevel * 2;
+                game_state.player.gold += Math.floor(goldDrop * (1 + game_state.player.stats.goldFind));
+                game_state.player.xp += 10;
+                addFloatingText(`+${goldDrop}G`, this.x, this.y, 'yellow');
+
+                // Drop key chance
+                if(Math.random() < 0.2) { // 20% chance
+                    game_state.map.objects.drops.push({type: 'key', x: this.x, y: this.y});
+                }
+                updateUI();
+            }
+        }
+        
+        // ======== Map Generation ========
+        const MapGenerator = {
+            generate(width, height) {
+                // **UPDATED** Now generates {type, variant} objects to prevent flickering
+                let map = Array(height).fill(null).map(() => Array(width).fill(null).map(() => ({ type: 1, variant: Math.random() })));
+
+                let x = Math.floor(width / 2);
+                let y = Math.floor(height / 2);
+                let floorsToCarve = Math.floor(width * height * 0.4);
+                let carved = 0;
+
+                while (carved < floorsToCarve) {
+                    if (map[y][x].type === 1) {
+                        map[y][x].type = 0; // 0 = floor
+                        carved++;
+                    }
+                    const dir = Math.floor(Math.random() * 4);
+                    if (dir === 0 && x > 1) x--;
+                    else if (dir === 1 && x < width - 2) x++;
+                    else if (dir === 2 && y > 1) y--;
+                    else if (dir === 3 && y < height - 2) y++;
+                }
+                
+                for (let i = 0; i < 4; i++) {
+                    let newMap = JSON.parse(JSON.stringify(map));
+                    for (let y = 1; y < height - 1; y++) {
+                        for (let x = 1; x < width - 1; x++) {
+                            let wallNeighbors = 0;
+                            for (let ny = -1; ny <= 1; ny++) {
+                                for (let nx = -1; nx <= 1; nx++) {
+                                    if (nx === 0 && ny === 0) continue;
+                                    if (map[y + ny][x + nx].type === 1) wallNeighbors++;
+                                }
+                            }
+                            if (wallNeighbors > 4) newMap[y][x].type = 1;
+                            else if (wallNeighbors < 4) newMap[y][x].type = 0;
+                        }
+                    }
+                    map = newMap;
+                }
+                return map;
+            },
+            
+            placeObjects(mapData) {
+                const floorTiles = [];
+                for(let y = 0; y < MAP_HEIGHT; y++) {
+                    for(let x = 0; x < MAP_WIDTH; x++) {
+                        if(mapData[y][x].type === 0) { // **UPDATED** check tile type
+                            floorTiles.push({x, y});
+                        }
+                    }
+                }
+                
+                const popRandomFloor = () => {
+                    if(floorTiles.length === 0) return null;
+                    const index = Math.floor(Math.random() * floorTiles.length);
+                    return floorTiles.splice(index, 1)[0];
+                };
+                
+                const playerStart = popRandomFloor();
+                const portalPos = popRandomFloor();
+                
+                const objects = {
+                    playerStart: { x: playerStart.x * TILE_SIZE, y: playerStart.y * TILE_SIZE },
+                    portal: { x: portalPos.x * TILE_SIZE, y: portalPos.y * TILE_SIZE, unlocked: false },
+                    chests: [],
+                    statues: [],
+                    drops: []
+                };
+
+                const numChests = 5 + Math.floor(Math.random() * 3);
+                for(let i=0; i<numChests; i++) {
+                    const pos = popRandomFloor();
+                    if(pos) objects.chests.push({ x: pos.x * TILE_SIZE, y: pos.y * TILE_SIZE });
+                }
+                
+                const numStatues = 1 + Math.floor(Math.random() * 2);
+                 for(let i=0; i<numStatues; i++) {
+                    const pos = popRandomFloor();
+                    if(pos) objects.statues.push({ x: pos.x * TILE_SIZE, y: pos.y * TILE_SIZE, id: 'statue' + i });
+                }
+                
+                const enemies = [];
+                const numEnemies = 20 + game_state.dungeonLevel * 5;
+                for (let i=0; i<numEnemies; i++) {
+                    const pos = popRandomFloor();
+                    if(pos) enemies.push(new Enemy(pos.x * TILE_SIZE, pos.y * TILE_SIZE, Math.random() > 0.5 ? 'A' : 'B'));
+                }
+
+                return { objects, enemies };
+            }
+        };
+
+        // ======== Game Loop & Logic ========
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            const dt = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
+
+            update(dt);
+            render();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function update(dt) {
+            if (game_state.isWindowOpen) return;
+
+            game_state.player.update(dt);
+            game_state.enemies.forEach(enemy => enemy.update(dt));
+
+            game_state.camera.x = game_state.player.x - canvas.width / 2;
+            game_state.camera.y = game_state.player.y - canvas.height / 2;
+            game_state.camera.x = Math.max(0, Math.min(game_state.camera.x, MAP_WIDTH * TILE_SIZE - canvas.width));
+            game_state.camera.y = Math.max(0, Math.min(game_state.camera.y, MAP_HEIGHT * TILE_SIZE - canvas.height));
+
+            game_state.floatingTexts = game_state.floatingTexts.filter(t => {
+                t.duration -= dt * 1000;
+                return t.duration > 0;
+            });
+
+            let remainingDrops = [];
+            game_state.map.objects.drops.forEach(drop => {
+                const dist = Math.hypot(game_state.player.x - drop.x, game_state.player.y - drop.y);
+                if (dist < TILE_SIZE) {
+                    game_state.player.pickupItem(drop);
+                } else {
+                    remainingDrops.push(drop);
+                }
+            });
+            game_state.map.objects.drops = remainingDrops;
+        }
+
+        function render() {
+            ctx.fillStyle = COLORS.FLOOR;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            ctx.translate(-game_state.camera.x, -game_state.camera.y);
+
+            const startX = Math.floor(game_state.camera.x / TILE_SIZE);
+            const endX = Math.ceil((game_state.camera.x + canvas.width) / TILE_SIZE);
+            const startY = Math.floor(game_state.camera.y / TILE_SIZE);
+            const endY = Math.ceil((game_state.camera.y + canvas.height) / TILE_SIZE);
+
+            for (let y = startY; y < endY; y++) {
+                for (let x = startX; x < endX; x++) {
+                    if (y >= 0 && y < MAP_HEIGHT && x >= 0 && x < MAP_WIDTH) {
+                        const tile = game_state.map.data[y][x]; // **UPDATED** get tile object
+                        if (tile.type === 1) {
+                            DRAW.wall(ctx, x * TILE_SIZE, y * TILE_SIZE, tile.variant);
+                        } else {
+                            DRAW.floor(ctx, x * TILE_SIZE, y * TILE_SIZE, tile.variant);
+                        }
+                    }
+                }
+            }
+            
+            game_state.map.objects.chests.forEach(o => DRAW.chest(ctx, o.x, o.y));
+            game_state.map.objects.statues.forEach(o => DRAW.statue(ctx, o.x, o.y));
+            const portal = game_state.map.objects.portal;
+            DRAW.portal(ctx, portal.x, portal.y, portal.unlocked);
+            game_state.map.objects.drops.forEach(o => {
+                if(o.type === 'key') DRAW.key(ctx, o.x, o.y);
+            });
+
+            game_state.enemies.forEach(enemy => enemy.drawFunc(ctx, enemy.x, enemy.y));
+
+            const player = game_state.player;
+            DRAW.player(ctx, player.x, player.y);
+            
+            if (player.isAttacking) {
+                const chargeProgress = Math.min(1, player.attackTimer / ATTACK_CHARGE_TIME);
+                const effectProgress = Math.max(0, (player.attackTimer - ATTACK_CHARGE_TIME) / ATTACK_DURATION);
+                
+                if (chargeProgress < 1) { // Charging
+                    ctx.fillStyle = 'rgba(255, 165, 0, 0.3)';
+                    ctx.beginPath();
+                    ctx.arc(player.x, player.y, ATTACK_RADIUS_OUTER, 0, Math.PI * 2);
+                    ctx.arc(player.x, player.y, ATTACK_RADIUS_INNER, 0, Math.PI * 2, true);
+                    ctx.fill();
+                    
+                    ctx.strokeStyle = 'rgba(255, 165, 0, 0.8)';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(player.x, player.y, ATTACK_RADIUS_OUTER, -Math.PI/2, -Math.PI/2 + (Math.PI * 2 * chargeProgress));
+                    ctx.stroke();
+                } else { // Attack effect
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${1 - effectProgress})`;
+                    ctx.lineWidth = 5;
+                    ctx.beginPath();
+                    ctx.arc(player.x, player.y, ATTACK_RADIUS_OUTER, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+            
+            game_state.floatingTexts.forEach(t => {
+                const yOffset = (1 - (t.duration / 1500)) * 60;
+                ctx.fillStyle = t.color;
+                ctx.font = "bold 16px 'Pixelify Sans'";
+                ctx.textAlign = "center";
+                ctx.globalAlpha = t.duration / 1500;
+                ctx.fillText(t.text, t.x, t.y - yOffset);
+                ctx.globalAlpha = 1;
+            });
+
+            ctx.restore();
+            renderMinimap();
+        }
+        
+        function renderMinimap() {
+            minimapCtx.fillStyle = '#000';
+            minimapCtx.fillRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+            
+            const player = game_state.player;
+            const mapScale = minimapCanvas.width / (TILE_SIZE * 20);
+            const mapOffsetX = player.x - (minimapCanvas.width / mapScale / 2);
+            const mapOffsetY = player.y - (minimapCanvas.height / mapScale / 2);
+
+            for(let y = 0; y < minimapCanvas.height; y++) {
+                for(let x = 0; x < minimapCanvas.width; x++) {
+                    const mapX = Math.floor((x / mapScale) + mapOffsetX / TILE_SIZE);
+                    const mapY = Math.floor((y / mapScale) + mapOffsetY / TILE_SIZE);
+                    
+                    if (mapY >= 0 && mapY < MAP_HEIGHT && mapX >= 0 && mapX < MAP_WIDTH) {
+                        if (game_state.map.data[mapY][mapX].type === 1) { // **UPDATED** Check tile type
+                            minimapCtx.fillStyle = '#333';
+                            minimapCtx.fillRect(x, y, 1, 1);
+                        }
+                    }
+                }
+            }
+            
+            minimapCtx.fillStyle = COLORS.PLAYER;
+            minimapCtx.fillRect(minimapCanvas.width / 2 - 1, minimapCanvas.height / 2 - 1, 3, 3);
+        }
+
+        // ======== UI Functions ========
+        function updateUI() {
+            const player = game_state.player;
+            hpValue.textContent = `${player.stats.hp} / ${player.stats.maxHp}`;
+            goldValue.textContent = player.gold;
+            updateInventoryUI();
+            updateCharacterUI();
+        }
+        
+        function updateInventoryUI() {
+            const player = game_state.player;
+            const equipPanel = document.getElementById('equipment-panel');
+            equipPanel.innerHTML = '';
+            EQUIP_SLOTS.forEach(slot => {
+                const slotDiv = document.createElement('div');
+                slotDiv.className = 'equip-slot';
+                slotDiv.dataset.slot = slot;
+                const item = player.equipment[slot];
+                const iconHtml = item ? `<img src="${item.iconDataUrl}" class="item-icon">` : `<div class="item-icon"></div>`;
+                
+                let detailsHtml;
+                if (item) {
+                    detailsHtml = `
+                        <div class="item-details">
+                            <div class="item-name">${item.name}</div>
+                            <div class="item-stats">${Object.entries(item.stats).map(([k,v]) => `${k}:${v}`).join(', ')}</div>
+                            <div class="item-affixes">${item.affixes.map(a => a.text).join('<br>')}</div>
+                            <button class="unequip-btn" data-slot="${slot}">卸下</button>
+                        </div>
+                    `;
+                } else {
+                    detailsHtml = `<div class="item-details"><div class="slot-name">${slot} (空)</div></div>`;
+                }
+                slotDiv.innerHTML = iconHtml + detailsHtml;
+                equipPanel.appendChild(slotDiv);
+            });
+            
+            document.querySelectorAll('.unequip-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    const slot = e.target.dataset.slot;
+                    player.unequip(slot);
+                };
+            });
+
+            const itemsPanel = document.getElementById('items-panel');
+            itemsPanel.innerHTML = '';
+            player.inventory.forEach(item => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'item-entry';
+                itemDiv.innerHTML = `
+                    <img src="${item.iconDataUrl}" class="item-icon">
+                    <div class="item-details">
+                        <div class="item-name">${item.name}</div>
+                    </div>
+                `;
+                itemDiv.onclick = () => {
+                    if (item.type === 'equipment') {
+                        player.equip(item);
+                    }
+                };
+                itemsPanel.appendChild(itemDiv);
+            });
+        }
+        
+        function updateCharacterUI() {
+            const grid = document.getElementById('character-stats-grid');
+            const p = game_state.player;
+            grid.innerHTML = `
+                <div class="stat-line"><span class="name">等级</span><span class="value">${game_state.dungeonLevel}</span></div>
+                <div class="stat-line"><span class="name">经验值</span><span class="value">${p.xp}</span></div>
+                <div class="stat-line"><span class="name">生命值</span><span class="value">${p.stats.hp} / ${p.stats.maxHp}</span></div>
+                <div class="stat-line"><span class="name">攻击力</span><span class="value">${p.stats.atk}</span></div>
+                <div class="stat-line"><span class="name">防御力</span><span class="value">${p.stats.def}</span></div>
+                <div class="stat-line"><span class="name">金币获取</span><span class="value">+${Math.round(p.stats.goldFind * 100)}%</span></div>
+                <div class="stat-line"><span class="name">生命偷取</span><span class="value">${Math.round(p.stats.lifeSteal * 100)}%</span></div>
+                <div class="stat-line"><span class="name">钥匙</span><span class="value">${p.keys}</span></div>
+            `;
+        }
+        
+        function openStatueWindow(statue) {
+            game_state.activeStatue = statue;
+            updateStatueUI();
+            toggleWindow(statueWindow, true);
+        }
+        
+        function updateStatueUI() {
+            const p = game_state.player;
+            const enchantList = statueWindow.querySelector('.enchant-item-list');
+            enchantList.innerHTML = '';
+            
+            Object.values(p.equipment).filter(Boolean).forEach(item => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'enchant-item';
+                let affixesHtml = item.affixes.map((affix, index) => `
+                    <div class="affix-line">
+                        <span>${affix.text}</span>
+                        <div class="affix-actions">
+                             <span class="cost xp">(20 XP)</span>
+                             <button class="reroll-btn" data-item-id="${item.id}" data-affix-index="${index}">洗练</button>
+                        </div>
+                    </div>
+                `).join('');
+                
+                itemDiv.innerHTML = `
+                    <div class="item-name">${item.name}</div>
+                    <div class="enchant-affix">${affixesHtml}</div>
+                `;
+                enchantList.appendChild(itemDiv);
+            });
+            
+            statueWindow.querySelectorAll('.reroll-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const cost = 20;
+                    if (p.xp < cost) { addLog('经验值不足！'); return; }
+                    p.xp -= cost;
+                    const itemId = btn.dataset.itemId;
+                    const affixIndex = parseInt(btn.dataset.affixIndex);
+                    const item = Object.values(p.equipment).find(i => i && i.id === itemId);
+                    if (item) {
+                        const isPrefix = item.affixes[affixIndex] && AFFIX_POOL.prefix.some(p => p.text === item.affixes[affixIndex].text);
+                        const pool = isPrefix ? AFFIX_POOL.prefix : AFFIX_POOL.suffix;
+                        const oldAffix = item.affixes[affixIndex];
+                        let newAffix;
+                        do {
+                            newAffix = pool[Math.floor(Math.random() * pool.length)];
+                        } while(newAffix.text === oldAffix.text);
+                        item.affixes[affixIndex] = newAffix;
+                        
+                        item.name = `${item.affixes[0].text}${baseName(item.name)}${item.affixes[1].text}`;
+                        
+                        p.recalculateStats();
+                        updateUI();
+                        updateStatueUI();
+                        addLog(`洗练成功: ${oldAffix.text} -> ${newAffix.text}`);
+                    }
+                };
+            });
+            
+            // Blessings
+            const blessingList = statueWindow.querySelector('.blessing-list');
+            const blessings = [
+                { id: 'maxHp', name: '生命祝福', desc: '永久最大生命值 +5', cost: 100, apply: (p) => p.permanentBlessings.maxHp += 5 },
+                { id: 'atk', name: '力量祝福', desc: '永久攻击力 +1', cost: 150, apply: (p) => p.permanentBlessings.atk += 1 },
+                { id: 'def', name: '坚韧祝福', desc: '永久防御力 +1', cost: 120, apply: (p) => p.permanentBlessings.def += 1 },
+            ];
+            blessingList.innerHTML = blessings.map(b => `
+                <div class="blessing">
+                    <h4>${b.name} <span class="cost gold">(${b.cost} G)</span></h4>
+                    <p class="blessing-desc">${b.desc}</p>
+                    <button class="blessing-btn" data-blessing-id="${b.id}">购买</button>
+                </div>
+            `).join('');
+            
+            blessingList.querySelectorAll('.blessing-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const blessingId = btn.dataset.blessingId;
+                    const blessing = blessings.find(b => b.id === blessingId);
+                    if(p.gold < blessing.cost) { addLog('金币不足!'); return; }
+                    p.gold -= blessing.cost;
+                    blessing.apply(p);
+                    addLog(`你获得了${blessing.name}!`);
+                    p.recalculateStats();
+                    updateUI();
+                }
+            });
+        }
+        
+        function baseName(fullName) {
+            let name = fullName;
+            for(let p of AFFIX_POOL.prefix) name = name.replace(p.text, '');
+            for(let s of AFFIX_POOL.suffix) name = name.replace(s.text, '');
+            return name;
+        }
+
+        function addLog(message) {
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-message';
+            logEntry.textContent = message;
+            logContainer.prepend(logEntry);
+            
+            setTimeout(() => logEntry.classList.add('visible'), 10);
+
+            const allLogs = logContainer.querySelectorAll('.log-message');
+            if (allLogs.length > 5) {
+                const oldMsg = allLogs[allLogs.length - 1];
+                 oldMsg.classList.remove('visible');
+                 setTimeout(() => oldMsg.remove(), 500);
+            }
+
+            setTimeout(() => {
+                logEntry.classList.remove('visible');
+                setTimeout(() => logEntry.remove(), 500);
+            }, 5000);
+        }
+
+        function addFloatingText(text, x, y, color) {
+            game_state.floatingTexts.push({ text, x, y, color, duration: 1500 });
+        }
+
+        function toggleWindow(win, forceOpen = null) {
+            const shouldOpen = forceOpen !== null ? forceOpen : !win.classList.contains('visible');
+            
+            document.querySelectorAll('.ui-window').forEach(w => {
+                if (w !== win) w.classList.remove('visible');
+            });
+            
+            if (shouldOpen) {
+                win.classList.add('visible');
+                game_state.isWindowOpen = true;
+            } else {
+                win.classList.remove('visible');
+                game_state.isWindowOpen = false;
+            }
+        }
+        
+        // ======== Initialization & Event Handlers ========
+        function init() {
+            resizeCanvas();
+            game_state.dungeonLevel = 1;
+            setupNewLevel();
+            
+            addLog("欢迎来到地牢！WASD/虚拟摇杆移动, J/攻击键攻击, E/交互键互动。");
+
+            window.addEventListener('resize', resizeCanvas);
+            window.addEventListener('keydown', e => {
+                const key = e.key.toLowerCase();
+                if (!game_state.isWindowOpen) game_state.keysDown[key] = true;
+                if (key === 'j' && !game_state.isWindowOpen) game_state.player.startAttack();
+                if (key === 'e' && !game_state.isWindowOpen) game_state.player.interact();
+                
+                if (key === 'b') { e.preventDefault(); toggleWindow(inventoryWindow); }
+                if (key === 'c') { e.preventDefault(); toggleWindow(characterWindow); }
+                if (key === 'p') { e.preventDefault(); toggleWindow(settingsWindow); }
+                if (e.key === 'Escape' && game_state.isWindowOpen) {
+                     document.querySelectorAll('.ui-window.visible').forEach(w => toggleWindow(w, false));
+                }
+            });
+            window.addEventListener('keyup', e => { delete game_state.keysDown[e.key.toLowerCase()]; });
+            
+            inventoryBtn.onclick = () => toggleWindow(inventoryWindow);
+            characterBtn.onclick = () => toggleWindow(characterWindow);
+            settingsBtn.onclick = () => toggleWindow(settingsWindow);
+
+            inventoryWindow.querySelectorAll('.tab-button').forEach(btn => {
+                btn.onclick = () => {
+                    inventoryWindow.querySelector('.tab-button.active').classList.remove('active');
+                    inventoryWindow.querySelector('.tab-content.active').classList.remove('active');
+                    btn.classList.add('active');
+                    document.getElementById(btn.dataset.tab).classList.add('active');
+                }
+            });
+            
+            statueWindow.querySelectorAll('.statue-option-btn').forEach(btn => {
+                btn.onclick = () => {
+                    statueWindow.querySelector('.statue-option-btn.active').classList.remove('active');
+                    statueWindow.querySelector('.statue-view.active').classList.remove('active');
+                    btn.classList.add('active');
+                    document.getElementById(btn.dataset.view).classList.add('active');
+                }
+            });
+
+            vControlsToggle.onchange = () => virtualControls.classList.toggle('active', vControlsToggle.checked);
+            setupVirtualControls();
+            
+            lastTime = performance.now();
+            gameLoop(lastTime);
+        }
+
+        function setupNewLevel() {
+            addLog(`正在进入第 ${game_state.dungeonLevel} 层...`);
+            const mapData = MapGenerator.generate(MAP_WIDTH, MAP_HEIGHT);
+            const { objects, enemies } = MapGenerator.placeObjects(mapData);
+            
+            game_state.map = { data: mapData, objects };
+            game_state.enemies = enemies;
+            
+            if (!game_state.player) {
+                game_state.player = new Player(objects.playerStart.x, objects.playerStart.y);
+            } else {
+                game_state.player.x = objects.playerStart.x;
+                game_state.player.y = objects.playerStart.y;
+            }
+            
+            game_state.player.recalculateStats();
+            updateUI();
+        }
+
+        function nextLevel() {
+            game_state.dungeonLevel++;
+            setupNewLevel();
+        }
+
+        function resizeCanvas() {
+            canvas.width = gameContainer.clientWidth;
+            canvas.height = gameContainer.clientHeight;
+        }
+        
+        function isWall(pixelX, pixelY) {
+            const mapX = Math.floor(pixelX / TILE_SIZE);
+            const mapY = Math.floor(pixelY / TILE_SIZE);
+            if (mapX < 0 || mapX >= MAP_WIDTH || mapY < 0 || mapY >= MAP_HEIGHT) return true;
+            return game_state.map.data[mapY][mapX].type === 1; // **UPDATED** Check tile type
+        }
+
+        function setupVirtualControls() {
+            const joystickZone = document.getElementById('joystick-zone');
+            const stick = document.getElementById('joystick-stick');
+            const base = document.getElementById('joystick-base');
+            const maxDist = base.clientWidth / 2;
+
+            const handleMove = (e) => {
+                if (!game_state.joystick.active) return;
+                e.preventDefault();
+                const touch = e.touches ? e.touches[0] : e;
+                const rect = joystickZone.getBoundingClientRect();
+                let x = touch.clientX - (rect.left + rect.width / 2);
+                let y = touch.clientY - (rect.top + rect.height / 2);
+                
+                const dist = Math.hypot(x, y);
+                const angle = Math.atan2(y, x);
+
+                if (dist > maxDist) {
+                    x = Math.cos(angle) * maxDist;
+                    y = Math.sin(angle) * maxDist;
+                }
+                
+                stick.style.transform = `translate(${x}px, ${y}px)`;
+                
+                game_state.joystick.x = Math.cos(angle);
+                game_state.joystick.y = Math.sin(angle);
+                if (dist < 10) { // Deadzone
+                     game_state.joystick.x = 0;
+                     game_state.joystick.y = 0;
+                }
+            };
+            
+            const handleEnd = (e) => {
+                if (!game_state.joystick.active) return;
+                e.preventDefault();
+                game_state.joystick.active = false;
+                stick.style.transform = `translate(0px, 0px)`;
+                game_state.joystick.x = 0;
+                game_state.joystick.y = 0;
+            };
+
+            joystickZone.addEventListener('touchstart', (e) => { game_state.joystick.active = true; handleMove(e); }, {passive: false});
+            joystickZone.addEventListener('touchmove', handleMove, {passive: false});
+            joystickZone.addEventListener('touchend', handleEnd, {passive: false});
+            
+            document.getElementById('v-button-attack').addEventListener('touchstart', (e) => {e.preventDefault(); if(!game_state.isWindowOpen) game_state.player.startAttack();});
+            document.getElementById('v-button-interact').addEventListener('touchstart', (e) => {e.preventDefault(); if(!game_state.isWindowOpen) game_state.player.interact();});
+        }
+        
+        init();
+    });
+    </script>
+</body>
+</html>
